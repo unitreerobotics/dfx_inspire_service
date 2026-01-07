@@ -120,4 +120,4 @@ sudo ./inspire_g1
     Open serial port /dev/ttyUSB* failed
     ```
     For **Unitree h1**, use the `-s` parameter to change the serial port name.  
-    For **Unitree g1**, modify the serial port name directly in the source code.
+    For **Unitree g1**, press 's' to swap hands on runtime terminal.

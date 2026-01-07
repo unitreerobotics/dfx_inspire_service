@@ -7,17 +7,56 @@
 #include <unitree/idl/go2/MotorStates_.hpp>
 #include <unitree/common/thread/recurrent_thread.hpp>
 
+#include <thread>
+#include <atomic>
+#include <termios.h>
+#include <unistd.h>
+
+// Get 2 available ports
+std::pair<std::string, std::string> getTwoSerialPorts() {
+    std::pair<std::string, std::string> ports;
+    int count = 0;
+    
+    FILE* pipe = popen("ls /dev/ttyUSB* 2>/dev/null", "r");
+    if (!pipe) {
+        std::cout << "Command error" << std::endl;
+        return ports;
+    }
+    
+    char buffer[128];
+    while (fgets(buffer, sizeof(buffer), pipe) && count < 2) {
+        std::string port = buffer;
+        // Remove newline
+        if (!port.empty() && port.back() == '\n') port.pop_back();
+        
+        if (count == 0) ports.first = port;
+        else ports.second = port;
+        
+        count++;
+    }
+    pclose(pipe);
+    
+    if (count < 2) {
+        std::cout << "Only " << count << " port(s) are available" << std::endl;
+        exit(1);
+        return {"", ""};
+    }
+    std::cout << "Working Ports are: " << ports.first <<" and " << ports.second << std::endl;
+    return ports;
+}
+
+
 class InspireRunner
 {
 public:
   InspireRunner()
-  {
-    serial1 = std::make_shared<SerialPort>("/dev/ttyUSB1", B115200);
-    serial2 = std::make_shared<SerialPort>("/dev/ttyUSB2", B115200);
+  {    
+    auto ports = getTwoSerialPorts();
+    serial1 = std::make_shared<SerialPort>(ports.first, B115200);
+    serial2 = std::make_shared<SerialPort>(ports.second, B115200);
 
-    // If your left and right hand controls are reversed, you can swap the positions of `serial1` and `serial2` below.
-    righthand = std::make_shared<inspire::InspireHand>(serial1, 1);
-    lefthand = std::make_shared<inspire::InspireHand>(serial2, 1);
+    hand_1 = std::make_shared<inspire::InspireHand>(serial1, 1);
+    hand_2 = std::make_shared<inspire::InspireHand>(serial2, 1);
 
     // dds
     handcmd = std::make_shared<unitree::robot::SubscriptionBase<unitree_go::msg::dds_::MotorCmds_>>(
@@ -31,24 +70,26 @@ public:
     thread = std::make_shared<unitree::common::RecurrentThread>(
       10000, std::bind(&InspireRunner::run, this)
     );
+
+    // Keyboard listener thread
+    keyboard_thread = std::thread(&InspireRunner::keyboardListener, this);
+    keyboard_thread.detach();
   }
 
   void run()
   {
-    // Set command
     if(!handcmd->isTimeout())
     {
       for(int i(0); i<12; i++)
       {
         qcmd(i) = handcmd->msg_.cmds()[i].q();
       }
-      righthand->SetPosition(qcmd.block<6, 1>(0, 0));
-      lefthand->SetPosition(qcmd.block<6, 1>(6, 0));
+      hand_1->SetPosition(qcmd.block<6, 1>(0, 0));
+      hand_2->SetPosition(qcmd.block<6, 1>(6, 0));
     }
 
-    // Recv state
     Eigen::Matrix<double, 6, 1> qtemp;
-    if(righthand->GetPosition(qtemp) == 0)
+    if(hand_1->GetPosition(qtemp) == 0)
     {
       qstate.block<6, 1>(0, 0) = qtemp;
     }
@@ -58,9 +99,9 @@ public:
       {
         handstate->msg_.states()[i].lost()++;
       }
-      // spdlog::debug("Failed to get right hand state");
     }
-    if(lefthand->GetPosition(qtemp) == 0)
+
+    if(hand_2->GetPosition(qtemp) == 0)
     {
       qstate.block<6, 1>(6, 0) = qtemp;
     }
@@ -70,30 +111,55 @@ public:
       {
         handstate->msg_.states()[i+6].lost()++;
       }
-      // spdlog::debug("Failed to get left hand state");
     }
+
     if(handstate->trylock())
     {
-        for(int i(0); i<12; i++)
-        {
-            handstate->msg_.states()[i].q() = qstate(i);
-        }
-        handstate->unlockAndPublish();
+      for(int i(0); i<12; i++)
+      {
+        handstate->msg_.states()[i].q() = qstate(i);
+      }
+      handstate->unlockAndPublish();
     }
   }
 
+private:
+  void keyboardListener()
+  {
+    termios oldt, newt;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+
+    while(true)
+    {
+      char c = getchar();
+      if(c == 's')
+      {
+        std::swap(hand_1, hand_2);
+        std::cout << "hands swapped" << std::endl;
+      }
+    }
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+  }
+
+public:
   unitree::common::ThreadPtr thread;
 
   // inspire
   SerialPort::SharedPtr serial1;
   SerialPort::SharedPtr serial2;
-  std::shared_ptr<inspire::InspireHand> lefthand;
-  std::shared_ptr<inspire::InspireHand> righthand;
+  std::shared_ptr<inspire::InspireHand> hand_1;
+  std::shared_ptr<inspire::InspireHand> hand_2;
   Eigen::Matrix<double, 12, 1> qcmd, qstate;
 
   // dds
   std::unique_ptr<unitree::robot::RealTimePublisher<unitree_go::msg::dds_::MotorStates_>> handstate;
   std::shared_ptr<unitree::robot::SubscriptionBase<unitree_go::msg::dds_::MotorCmds_>> handcmd;
+
+  std::thread keyboard_thread;
 };
 
 int main(int argc, char ** argv)
@@ -103,12 +169,14 @@ int main(int argc, char ** argv)
 
   std::cout << " --- Unitree Robotics --- " << std::endl;
   std::cout << "  Inspire Hand Controller  " << std::endl;
+  std::cout << "  Press 's' to swap hands  " << std::endl;
 
   InspireRunner runner;
- 
+
   while (true)
   {
     sleep(1);
   }
   return 0;
 }
+
