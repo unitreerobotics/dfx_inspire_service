@@ -92,6 +92,8 @@ make -j6
 # Terminal 1. Run g1 inspire hand service
 # The serial port name is hard-coded; if it doesn’t match your setup, please edit it directly in the source.
 sudo ./inspire_g1
+# Do the following instead if you want to skip hand whose serial port failed to be opened:
+sudo ./inspire_g1 -k
 # Terminal 2. Run example
 ./hand_example
 ```

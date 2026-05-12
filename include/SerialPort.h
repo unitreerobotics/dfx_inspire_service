@@ -13,6 +13,7 @@
 #include <memory>
 #include <chrono>
 #include <queue>
+#include <stdexcept>
 
 class SerialPort
 {
@@ -72,8 +73,8 @@ private:
     fd_ = open(port.c_str(), O_RDWR | O_NOCTTY);
     if (fd_ < 0)
     {
-      printf("Open serial port %s failed\n", port.c_str());
-      exit(-1);
+      std::string err = "Open serial port " + port + " failed";
+      throw std::runtime_error(err);
     }
 
     // Set attributes
