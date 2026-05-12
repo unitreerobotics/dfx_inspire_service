@@ -92,6 +92,9 @@ make -j6
 # Terminal 1. Run g1 inspire hand service
 # The serial port name is hard-coded; if it doesn’t match your setup, please edit it directly in the source.
 sudo ./inspire_g1
+# Do the following instead if you want to use unique device names (/dev/inspire_left, /dev/inspire_right):
+../udev/setup_g1_udev_for_unique_device_names.sh <ARGUMENTS>  # You have to call this script once every time you change the USB connection tree of each hand. Check what should be set as ARGUMENTS by running ../udev/setup_g1_udev_for_unique_device_names.sh without ARGUMENTS
+sudo ./inspire_g1 -u
 # Terminal 2. Run example
 ./hand_example
 ```

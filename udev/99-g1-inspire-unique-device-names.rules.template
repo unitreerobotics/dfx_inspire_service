@@ -1,0 +1,4 @@
+# We have no choise but to use KERNELS:
+# https://arduino.stackexchange.com/questions/6617/setting-serial-number-on-ch340-usb-serial-device
+SUBSYSTEM=="tty", KERNELS=="{{RHAND_KERNELS}}", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", MODE="0666", SYMLINK+="inspire_right"
+SUBSYSTEM=="tty", KERNELS=="{{LHAND_KERNELS}}", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", MODE="0666", SYMLINK+="inspire_left"
