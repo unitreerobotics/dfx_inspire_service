@@ -15,6 +15,7 @@ namespace po = boost::program_options;
 inline std::string serial_port;
 inline std::string network; 
 inline std::string ns; 
+inline bool use_uni_dev_n;
 inline float threhold;
 
 po::variables_map helper(int argc, char** argv)
@@ -26,12 +27,14 @@ po::variables_map helper(int argc, char** argv)
 #endif
 
 
-  po::options_description desc("Unitree H1 Inspire Hand Serial to DDS");
+  po::options_description desc("Unitree H1/G1 Inspire Hand Serial to DDS");
   desc.add_options()
     ("help,h", "produce help message")
-    ("serial,s", po::value<std::string>(&serial_port)->default_value("/dev/ttyUSB0"), "serial port")
+    ("serial,s", po::value<std::string>(&serial_port)->default_value("/dev/ttyUSB0"), "(Only for H1) serial port")
     ("network", po::value<std::string>(&network)->default_value(""), "DDS network interface")
     ("namespace", po::value<std::string>(&ns)->default_value("inspire"), "DDS topic namespace")
+    ("use-unique-device-name,u", po::bool_switch(&use_uni_dev_n),
+     "(Only for G1) Use unique device names (/dev/inspire_left, /dev/inspire_right)")
     ;
 
   po::variables_map vm;
