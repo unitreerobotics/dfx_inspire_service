@@ -18,6 +18,7 @@ if(POLICY CMP0167)
 endif()
 
 find_package(Boost COMPONENTS program_options REQUIRED)
+find_package(fmt REQUIRED)
 
 include_directories(
   /usr/local/include/ddscxx
@@ -30,6 +31,8 @@ link_libraries(libboost_program_options.a)
 
 add_executable(inspire_g1 inspire_g1.cpp)
 add_executable(inspire_h1 inspire_h1.cpp)
+target_link_libraries(inspire_g1 PRIVATE fmt::fmt)
+target_link_libraries(inspire_h1 PRIVATE fmt::fmt)
 
 # example
 add_executable(hand_example example/hand_example.cpp)
