@@ -41,6 +41,18 @@ public:
   {
     Eigen::Matrix<int16_t, 6, 1> q_int16 = (q * 1000).cast<int16_t>().cwiseMax(0).cwiseMin(1000);
 
+    return SetPositionRaw(q_int16);
+  }
+
+  /**
+   * @brief Set an already validated position in the device's [0, 1000] units.
+   *
+   * The G1 adapter uses this entry point after finite checking and floating-
+   * point clamping. The existing SetPosition() behavior used by H1 is kept.
+   */
+  int16_t SetPositionRaw(const Eigen::Matrix<int16_t, 6, 1> & q_int16)
+  {
+
     uint8_t cmd[20];
     cmd[0] = 0xEB;    // head
     cmd[1] = 0x90;

@@ -21,8 +21,8 @@ public:
     last_update_time_ = std::chrono::steady_clock::now() - std::chrono::milliseconds(timeout_ms_);
     sub_ = std::make_shared<unitree::robot::ChannelSubscriber<MessageType>>(topic);
     sub_->InitChannel([this](const void *msg){
-      last_update_time_ = std::chrono::steady_clock::now();
       std::lock_guard<std::mutex> lock(mutex_);
+      last_update_time_ = std::chrono::steady_clock::now();
       msg_ = *(const MessageType*)msg;
       post_communication();
     });
@@ -31,9 +31,24 @@ public:
   void set_timeout_ms(uint32_t timeout_ms) { timeout_ms_ = timeout_ms; }
 
   bool isTimeout() {
+    std::lock_guard<std::mutex> lock(mutex_);
     auto now = std::chrono::steady_clock::now();
     auto elasped_time = now - last_update_time_;
     return elasped_time > std::chrono::milliseconds(timeout_ms_);
+  }
+
+  // Atomically copy a complete, non-expired sample. G1 uses this instead of
+  // reading msg_ concurrently with the DDS callback.
+  bool getLatest(MessageType& message)
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto now = std::chrono::steady_clock::now();
+    if(now - last_update_time_ > std::chrono::milliseconds(timeout_ms_))
+    {
+      return false;
+    }
+    message = msg_;
+    return true;
   }
 
 

@@ -90,8 +90,11 @@ mkdir build & cd build
 cmake ..
 make -j6
 # Terminal 1. Run g1 inspire hand service
-# The serial port name is hard-coded; if it doesn’t match your setup, please edit it directly in the source.
-sudo ./inspire_g1
+sudo ./inspire_g1 --right-port /dev/ttyUSB1 --left-port /dev/ttyUSB2
+# Left hand only: no right-hand device is created, opened, polled, or controlled.
+sudo ./inspire_g1 --left-only --left-port /dev/ttyUSB2
+# Offline mode: uses in-memory mock hands and never constructs a SerialPort.
+./inspire_g1 --dry-run
 # Terminal 2. Run example
 ./hand_example
 ```
@@ -120,4 +123,4 @@ sudo ./inspire_g1
     Open serial port /dev/ttyUSB* failed
     ```
     For **Unitree h1**, use the `-s` parameter to change the serial port name.  
-    For **Unitree g1**, modify the serial port name directly in the source code.
+    For **Unitree g1**, use `--right-port` and `--left-port` to select the serial ports.
