@@ -1,5 +1,8 @@
-#include "inspire.h"
 #include "param.h"
+
+#include "g1/DeviceSetup.h"
+#include "g1/G1ControlCore.h"
+#include "g1/SerialHandDevice.h"
 
 #include "dds/Publisher.h"
 #include "dds/Subscription.h"
@@ -7,17 +10,17 @@
 #include <unitree/idl/go2/MotorStates_.hpp>
 #include <unitree/common/thread/recurrent_thread.hpp>
 
+#include <algorithm>
+#include <array>
+
 class InspireRunner
 {
 public:
-  InspireRunner()
+  explicit InspireRunner(const g1::Configuration& config)
   {
-    serial1 = std::make_shared<SerialPort>("/dev/ttyUSB1", B115200);
-    serial2 = std::make_shared<SerialPort>("/dev/ttyUSB2", B115200);
-
-    // If your left and right hand controls are reversed, you can swap the positions of `serial1` and `serial2` below.
-    righthand = std::make_shared<inspire::InspireHand>(serial1, 1);
-    lefthand = std::make_shared<inspire::InspireHand>(serial2, 1);
+    g1::DefaultHandDeviceFactory factory;
+    auto devices = g1::CreateDevices(config, factory);
+    control = std::make_unique<g1::G1ControlCore>(devices.right, devices.left);
 
     // dds
     handcmd = std::make_shared<unitree::robot::SubscriptionBase<unitree_go::msg::dds_::MotorCmds_>>(
@@ -35,61 +38,42 @@ public:
 
   void run()
   {
-    // Set command
-    if(!handcmd->isTimeout())
+    // Copy a coherent DDS sample. A missing/expired sample deliberately results
+    // in no SetPosition call and no implicit close/open/zero command.
+    unitree_go::msg::dds_::MotorCmds_ command_message;
+    std::array<double, g1::kTotalJoints> command{};
+    if(handcmd->getLatest(command_message))
     {
-      for(int i(0); i<12; i++)
+      const std::size_t command_size = command_message.cmds().size();
+      const std::size_t copy_size = std::min(command_size, g1::kTotalJoints);
+      for(std::size_t i = 0; i < copy_size; ++i)
       {
-        qcmd(i) = handcmd->msg_.cmds()[i].q();
+        command[i] = command_message.cmds()[i].q();
       }
-      righthand->SetPosition(qcmd.block<6, 1>(0, 0));
-      lefthand->SetPosition(qcmd.block<6, 1>(6, 0));
+      control->ProcessCommand(command.data(), command_size, false);
+    }
+    else
+    {
+      control->ProcessCommand(nullptr, 0, true);
     }
 
-    // Recv state
-    Eigen::Matrix<double, 6, 1> qtemp;
-    if(righthand->GetPosition(qtemp) == 0)
-    {
-      qstate.block<6, 1>(0, 0) = qtemp;
-    }
-    else
-    {
-      for(int i(0); i<6; i++)
-      {
-        handstate->msg_.states()[i].lost()++;
-      }
-      // spdlog::debug("Failed to get right hand state");
-    }
-    if(lefthand->GetPosition(qtemp) == 0)
-    {
-      qstate.block<6, 1>(6, 0) = qtemp;
-    }
-    else
-    {
-      for(int i(0); i<6; i++)
-      {
-        handstate->msg_.states()[i+6].lost()++;
-      }
-      // spdlog::debug("Failed to get left hand state");
-    }
+    control->PollState();
     if(handstate->trylock())
     {
-        for(int i(0); i<12; i++)
-        {
-            handstate->msg_.states()[i].q() = qstate(i);
-        }
-        handstate->unlockAndPublish();
+      const auto& qstate = control->qstate();
+      const auto& lost = control->lost();
+      for(std::size_t i = 0; i < g1::kTotalJoints; ++i)
+      {
+        handstate->msg_.states()[i].q() = qstate[i];
+        handstate->msg_.states()[i].lost() = lost[i];
+      }
+      handstate->unlockAndPublish();
     }
   }
 
   unitree::common::ThreadPtr thread;
 
-  // inspire
-  SerialPort::SharedPtr serial1;
-  SerialPort::SharedPtr serial2;
-  std::shared_ptr<inspire::InspireHand> lefthand;
-  std::shared_ptr<inspire::InspireHand> righthand;
-  Eigen::Matrix<double, 12, 1> qcmd, qstate;
+  std::unique_ptr<g1::G1ControlCore> control;
 
   // dds
   std::unique_ptr<unitree::robot::RealTimePublisher<unitree_go::msg::dds_::MotorStates_>> handstate;
@@ -98,13 +82,14 @@ public:
 
 int main(int argc, char ** argv)
 {
-  auto vm = param::helper(argc, argv);
+  g1::Configuration config;
+  auto vm = param::g1_helper(argc, argv, config);
   unitree::robot::ChannelFactory::Instance()->Init(0, param::network);
 
   std::cout << " --- Unitree Robotics --- " << std::endl;
   std::cout << "  Inspire Hand Controller  " << std::endl;
 
-  InspireRunner runner;
+  InspireRunner runner(config);
  
   while (true)
   {
