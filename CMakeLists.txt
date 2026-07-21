@@ -18,6 +18,8 @@ if(POLICY CMP0167)
 endif()
 
 find_package(Boost COMPONENTS program_options REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
+find_package(fmt CONFIG REQUIRED)
 
 include_directories(
   /usr/local/include/ddscxx
@@ -50,3 +52,6 @@ enable_testing()
 add_executable(g1_mock_tests tests/g1_mock_tests.cpp)
 target_include_directories(g1_mock_tests PRIVATE include)
 add_test(NAME g1_mock_tests COMMAND g1_mock_tests)
+target_link_libraries(inspire_g1 PRIVATE fmt::fmt spdlog::spdlog)
+target_link_libraries(inspire_h1 PRIVATE fmt::fmt spdlog::spdlog)
+target_link_libraries(hand_example PRIVATE fmt::fmt spdlog::spdlog)
