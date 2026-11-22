@@ -226,7 +226,7 @@ public:
    */
   void Calibration()
   {
-    std::vector<uint8_t> cmd = {0xEB, 0x90, id, 0x04, 0x12, 0x2F, 0x06, 0x01, 0x00};
+    std::vector<uint8_t> cmd = {0xEB, 0x90, id, 0x04, 0x12, 0xF1, 0x03, 0x01, 0x00};
     cmd.back() = CheckSum(cmd.data(), cmd.size());
     serial_->send(cmd.data(), cmd.size());
 
